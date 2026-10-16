@@ -37,16 +37,21 @@ These tests use isolated sockets, state directories, API replies, and a fake `he
 - [x] Confirm a live down-split action reused a pool terminal: `term_65df6dfa3480cab` moved from `w8R:pR` to `w8P:p15` in tab `w8P:t1`, with the working directory updated. Subsequent status reported `2/2 ready`.
 - [ ] Verify shell startup and terminal rendering more thoroughly and exact split geometry. Identity checks prove reuse for the observed new-tab, left-split, and down-split actions, not every request or readiness beyond the current checks.
 - [ ] Verify macOS and Linux behavior on both platforms. Migration checks were run on macOS only.
-- [ ] Add a direct concurrent-request stress test. Busy-lock behavior is covered, but simultaneous requests have not been stress-tested.
-- [ ] Add explicit elapsed-time tests for connect/read timeouts and for foreground completion while background replenishment is deliberately blocked. Current tests exercise background replenishment but do not establish a latency bound.
+- [x] Add a deterministic two-request overlap test: A's move response is held pending while B must complete silent cold-tab recovery. Verify one original warm terminal moved, one distinct cold destination, two original terminals still pooled, correct setup/focus requests, and both detached refills exiting. The server remains responsive while A is paused.
+- [x] Check concurrency-test sensitivity: a disposable build with pool locking disabled fails with a duplicate warm-shell move while A is pending. Production source and the installed binary were not modified.
+- [ ] Broader concurrent-request stress testing remains unverified. The controlled new-tab overlap does not cover every action combination or scheduling pattern.
+- [x] Verify foreground completion while replenishment is deliberately blocked: hold the refill worker's `tab.create` response, confirm the new-tab CLI exits successfully while its refill worker and launcher remain alive, then release the response and verify replenishment finishes with two pooled shells. A disposable synchronous-refill build fails the test because the foreground CLI cannot exit before release.
+- [ ] Add explicit elapsed-time tests for API connect/read timeouts. The blocked-refill gate proves foreground/refill independence, not a general latency bound.
 - [ ] Add broader malformed-response, worker-record cleanup, and partial-failure cases as needed. Passing tests are not exhaustive proof of all possible API replies or operating-system failures.
 
 ## Checks
 
-- Rust integration tests: 31 passing against each implementation.
+- Rust integration tests: 33 passing against each implementation, including controlled overlap and blocked-refill tests.
+- Focused overlap test: 20 consecutive passing runs; also passes against the archived Go reference. A no-lock disposable build fails as expected.
+- Focused blocked-refill test: 20 consecutive passing runs; also passes against the archived Go reference. A synchronous-refill disposable build fails as expected.
 - Archived Go helper tests: passing.
 - Rust formatting and Clippy with warnings denied: passing.
-- Rust release build and all 31 release-mode tests: passing.
+- Rust release build and all 33 release-mode tests: passing.
 - Final post-move run of all 31 Rust tests against a newly built archived Go reference: passing.
 - All seven archived Go source/module files match their original Git versions byte-for-byte.
 - No Go source files remain outside `legacy/` in this project.

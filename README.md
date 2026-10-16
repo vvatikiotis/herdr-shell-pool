@@ -28,6 +28,18 @@ cargo clippy --all-targets -- -D warnings
 
 Rust integration tests invoke the executable against isolated Unix sockets, state directories, controlled Herdr replies, and a fake `herdr` shell-input executable. Worker tests exercise real process identity checks with disposable test processes. Tests do not use the live Herdr socket.
 
+Run the controlled concurrency tests on their own:
+
+```sh
+cargo test --test concurrency
+```
+
+The overlap test pauses request A's move response, then requires overlapping request B to finish cold-shell recovery before A is released. The fake server keeps accepting requests during the pause. Assertions check one warm-shell move, one cold tab, distinct destinations, working-context setup, and focus. This is current busy-lock behavior, not a requirement that both requests get warm shells.
+
+The blocked-refill test starts with two pool shells, moves one to a new tab, then holds the refill worker's new-shell response. The foreground CLI must exit while that response remains blocked and the refill worker and launcher remain alive. Releasing the response lets the pool return to two shells.
+
+Both tests use a private copy of the selected executable, an isolated stateful API, and a `ps` shim that delegates identity checks to real `ps`. They wait for detached refill launchers/workers to exit, with identity-checked cleanup on failure. The fake `herdr` logs shell input rather than executing setup; actual shell startup and rendering are not covered. Event gates establish ordering; deadlines bound hangs, not performance.
+
 Run the same Rust tests against the archived Go implementation:
 
 ```sh
