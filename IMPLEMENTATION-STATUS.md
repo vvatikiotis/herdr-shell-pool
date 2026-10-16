@@ -8,7 +8,7 @@
 - [x] Rust integration tests invoke the executable rather than private helper functions.
 - [x] All Go source, tests, and module files are archived unchanged under `legacy/`.
 - [x] The same 31 Rust integration tests pass against the Rust executable and a separately built Go reference.
-- [x] Build and install the release binary as `herdr-shell-pool-bin` inside this project and update the three Herdr shortcuts in the parent configuration to use it. All 31 integration tests pass against the installed binary. Live-session behavior remains unverified.
+- [x] Build and install the release binary as `herdr-shell-pool-bin` inside this project and update the three Herdr shortcuts in the parent configuration to use it. All 31 integration tests pass against the installed binary. Live smoke-test results are recorded below.
 
 ## Verified through controlled external boundaries
 
@@ -31,7 +31,11 @@ These tests use isolated sockets, state directories, API replies, and a fake `he
 
 ## Verification limits and remaining coverage
 
-- [ ] Verify actual shell startup, terminal rendering, focus, and 61% layout in a live Herdr session. No live-session changes were made during migration.
+- [x] Live smoke test: explicit `fill` succeeded and `status` reported `2/2 ready`. The user confirmed new-tab, left split, and down split opened in the expected location with keyboard focus and the same directory; left width was approximately 61%. A subsequent `status` again reported `2/2 ready`.
+- [x] Confirm a live new-tab action reused a pool terminal: `term_65df6d7098621a9` moved from pool pane `w8R:pP` to destination pane `w8P:p13` in tab `w8P:t8`, with the working directory updated. Pane IDs change across workspaces; terminal identity established reuse for this action.
+- [x] Confirm a live left-split action reused a pool terminal: `term_65df6d710036faa` moved from `w8R:pQ` to `w8P:p14` in tab `w8P:t1`, with the working directory updated.
+- [x] Confirm a live down-split action reused a pool terminal: `term_65df6dfa3480cab` moved from `w8R:pR` to `w8P:p15` in tab `w8P:t1`, with the working directory updated. Subsequent status reported `2/2 ready`.
+- [ ] Verify shell startup and terminal rendering more thoroughly and exact split geometry. Identity checks prove reuse for the observed new-tab, left-split, and down-split actions, not every request or readiness beyond the current checks.
 - [ ] Verify macOS and Linux behavior on both platforms. Migration checks were run on macOS only.
 - [ ] Add a direct concurrent-request stress test. Busy-lock behavior is covered, but simultaneous requests have not been stress-tested.
 - [ ] Add explicit elapsed-time tests for connect/read timeouts and for foreground completion while background replenishment is deliberately blocked. Current tests exercise background replenishment but do not establish a latency bound.
