@@ -10,7 +10,7 @@ Starting a shell for every new tab or split can delay work while shell startup c
 
 Hold shells in a dedicated pool workspace. For a new tab or left/down split, select an eligible warm shell, move its pane into the requested location, update its directory and location identifiers, and focus it. Start background replenishment after a successful request. A `new-workspace` action also moves a warm pane directly into a new workspace for a directory selected by sessionizer.
 
-When the pool lock is busy, no eligible shell exists, or Herdr reports an unchanged move, open the requested destination with a cold shell instead. This recovery is currently silent.
+For tabs and splits, when the pool lock is busy, no eligible shell exists, or Herdr reports an unchanged move, open the requested destination with a cold shell instead. This recovery is currently silent. The new-workspace action does not implement cold-shell recovery.
 
 ## User Stories
 
@@ -39,7 +39,7 @@ When the pool lock is busy, no eligible shell exists, or Herdr reports an unchan
 - CLI arguments select `new-tab`, `split-left`, `split-down`, `new-workspace`, `fill`, and `status`. An internal `fill-worker` action requires a worker token. Unknown actions fail with usage information.
 - Configured shortcuts invoke `new-tab` with `prefix+c`, `split-left` with `prefix+"`, and `split-down` with `prefix+%`.
 - For tabs and splits, the source pane is selected from `HERDR_ACTIVE_PANE_ID`, falling back to `HERDR_PANE_ID`. Missing identifiers or a source absent from the session snapshot cause an error.
-- The destination directory is the source pane's foreground directory, falling back to its recorded directory and then the user's home directory.
+- For tabs and splits, the destination directory is the source pane's foreground directory, falling back to its recorded directory and then the user's home directory.
 - A new tab belongs to the source workspace. A split belongs to the source tab alongside the source pane.
 
 ### Pool and selection
@@ -99,3 +99,5 @@ When the pool lock is busy, no eligible shell exists, or Herdr reports an unchan
 ## Further Notes
 
 This is a description of existing functionality, including its limitations, not an endorsement of every current failure mode. Changes to those behaviors require a separate implementation task and corresponding tests.
+
+Sessionizer owns picker integration, history exclusion, and focus recovery after shell exit; those behaviors are described in its [spec](../herdr-sessionizer/SPEC.md). Workspace creation calls the shell-pool CLI directly. Sessionizer's separate `pane.exited` hook handles Ctrl+d fallback and must be registered through its manifest.

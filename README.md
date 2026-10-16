@@ -7,8 +7,10 @@ Rust implementation of the existing behavior described in [SPEC.md](SPEC.md). Th
 Requires Rust with edition 2024 support, macOS or Linux, and Herdr. Shell setup invokes the `herdr` executable from `PATH`.
 
 ```sh
-cargo build --release
-install -m 755 target/release/herdr-shell-pool ./herdr-shell-pool-bin
+cargo build --release &&
+cp target/release/herdr-shell-pool ./herdr-shell-pool-bin.new &&
+chmod 755 ./herdr-shell-pool-bin.new &&
+mv -f ./herdr-shell-pool-bin.new ./herdr-shell-pool-bin
 ./herdr-shell-pool-bin status
 ```
 
@@ -18,13 +20,17 @@ The new-workspace action is the first workspace-support slice: it moves a warm p
 
 Herdr's new-tab and left/down split bindings point to `herdr-shell-pool-bin` in this directory. Rebuild and install it with the commands above after source changes. The binary is ignored by Git.
 
-Do not overwrite an executable currently running; install a replacement through a temporary file and rename it if needed. Startup integration is not added.
+The temporary-file-and-rename sequence avoids overwriting an executable that may be running. Automatic pool preparation at Herdr startup is not implemented.
 
 ## Sessionizer integration
 
-Sessionizer source now looks for this project's `herdr-shell-pool-bin` beside its own plugin directory. Selecting an unopened project delegates creation to `new-workspace`; existing-workspace selection, Ctrl+f, history, and selected-directory output are unchanged. No new Herdr plugin registration or key binding is required.
+Sessionizer looks for this project's `herdr-shell-pool-bin` beside its own plugin directory. Selecting an unopened project delegates creation to `new-workspace`; existing-workspace selection, Ctrl+f, and selected-directory output are unchanged. Workspace creation itself needs no new plugin hook or key binding.
 
-Build and install compatible versions of both tools together before using this integration. Both updated release binaries are installed at their configured locations; live workspace integration still needs verification. A missing pool executable preserves ordinary sessionizer creation; a failing executable stops creation without a blind retry. Descriptive notifications remain planned.
+Sessionizer separately excludes the pool workspace from visit history and jump-back. Its `pane.exited` hook corrects Herdr's Ctrl+d fallback when closing a workspace leaves the pool focused. That fix requires the updated sessionizer manifest to be relinked; the shell-pool tool does not manage close-focus behavior. See the [sessionizer README](../herdr-sessionizer/README.md).
+
+Build and install compatible versions of both tools together. Both updated binaries are installed, and sessionizer's pane-exit hook is registered. Ctrl+d recovery passed real isolated Herdr checks, including a workspace created by the shell-pool action. Full interactive picker-to-warm-workspace verification remains pending.
+
+Sessionizer works without shell pool installed. A missing executable preserves ordinary workspace creation; a failing executable stops creation without a blind retry. Descriptive notifications and workspace cold-shell recovery remain planned.
 
 ## Test
 

@@ -7,16 +7,18 @@
 - [x] Rust is the active source implementation under `src/`.
 - [x] Rust integration tests invoke the executable rather than private helper functions.
 - [x] All Go source, tests, and module files are archived unchanged under `legacy/`.
-- [x] The same 31 Rust integration tests pass against the Rust executable and a separately built Go reference.
-- [x] Build and install the release binary as `herdr-shell-pool-bin` inside this project and update the three Herdr shortcuts in the parent configuration to use it. All 31 integration tests pass against the installed binary. Live smoke-test results are recorded below.
+- [x] At migration, the same 31 Rust integration tests passed against the Rust executable and a separately built Go reference.
+- [x] Build and install the release binary as `herdr-shell-pool-bin` inside this project and update the three Herdr shortcuts in the parent configuration to use it. At that stage, all 31 integration tests passed against the installed binary. Live smoke-test results are recorded below.
 
-## Workspace creation: first source slice
+## Workspace creation and sessionizer integration
 
 - [x] Add `new-workspace --cwd <absolute-path> --label <name>`, moving an eligible warm shell directly into a new workspace with a matching initial-tab name, destination context, directory, focus, and background replenishment.
 - [x] Verify the workspace action through the executable and controlled Herdr API, without requiring source-pane identifiers. Reject an unusable directory before any creation attempt.
 - [x] Integrate sessionizer's unopened-directory selection with the sibling shell-pool executable. Its executable test verifies delegation, selected-directory output, and history. Existing sessionizer tests continue to pass.
-- [x] Build and install both updated release binaries at `herdr-shell-pool-bin` and the sibling sessionizer's `herdr-sessionizer`, replacing each through a temporary file and rename. Installed files match their release outputs. No Herdr configuration or plugin registration changes were needed.
-- [ ] Verify a real sessionizer selection moves an existing pool terminal into the new workspace and preserves the selected directory, labels, history, and focus.
+- [x] Build and install both updated release binaries at `herdr-shell-pool-bin` and the sibling sessionizer's `herdr-sessionizer`, replacing each through a temporary file and rename. Installed files match their release outputs. Workspace creation itself needed no new key binding or plugin hook.
+- [x] Verify Ctrl+d recovery with real isolated Herdr 0.9.5/macOS sessions. Both ordinary creation and the shell-pool `new-workspace` action reproduced native fallback to the pool; the updated sessionizer hook returned focus to the original user workspace. The retained opt-in regression uses ordinary creation and a reserved-label stand-in, so no shell-pool installation is required.
+- [x] Install the updated sessionizer binary and relink its manifest to register `pane.exited` → `after-pane-exit`. Other plugin registrations were unchanged; no server restart was needed.
+- [ ] Verify the full live sessionizer picker flow: selection, preserved pool terminal identity, selected directory, workspace/tab labels, history, and focus. The isolated exit checks do not establish all of these.
 - Workspace recovery and notifications remain in `PLANNED.md`. The source stops on tool failure without a creation retry; a missing tool retains ordinary creation without the planned notification.
 
 ## Verified through controlled external boundaries
@@ -48,21 +50,22 @@ These tests use isolated sockets, state directories, API replies, and a fake `he
 - [ ] Verify macOS and Linux behavior on both platforms. Migration checks were run on macOS only.
 - [x] Add a deterministic two-request overlap test: A's move response is held pending while B must complete silent cold-tab recovery. Verify one original warm terminal moved, one distinct cold destination, two original terminals still pooled, correct setup/focus requests, and both detached refills exiting. The server remains responsive while A is paused.
 - [x] Check concurrency-test sensitivity: a disposable build with pool locking disabled fails with a duplicate warm-shell move while A is pending. Production source and the installed binary were not modified.
-- [ ] Broader concurrent-request stress testing remains unverified. The controlled new-tab overlap does not cover every action combination or scheduling pattern.
+- [ ] Deferred optional coverage: broader concurrent-request stress testing remains unverified. The controlled new-tab overlap does not cover every action combination or scheduling pattern.
 - [x] Verify foreground completion while replenishment is deliberately blocked: hold the refill worker's `tab.create` response, confirm the new-tab CLI exits successfully while its refill worker and launcher remain alive, then release the response and verify replenishment finishes with two pooled shells. A disposable synchronous-refill build fails the test because the foreground CLI cannot exit before release.
-- [ ] Add explicit elapsed-time tests for API connect/read timeouts. The blocked-refill gate proves foreground/refill independence, not a general latency bound.
-- [ ] Add broader malformed-response, worker-record cleanup, and partial-failure cases as needed. Passing tests are not exhaustive proof of all possible API replies or operating-system failures.
+- [ ] Deferred optional coverage: explicit elapsed-time tests for API connect/read timeouts. The blocked-refill gate proves foreground/refill independence, not a general latency bound.
+- [ ] Deferred optional coverage: broader malformed-response, worker-record cleanup, and partial-failure cases. Passing tests are not exhaustive proof of all possible API replies or operating-system failures.
 
 ## Checks
 
 - Current Rust integration tests: 35 passing, including workspace creation and unusable-directory rejection. The 33-test pre-workspace baseline passed against both implementations; new workspace behavior and updated usage text are not supported by archived Go.
-- Sessionizer tests: 15 passing, including delegated workspace creation, selected-directory output, and history.
+- Sessionizer Rust tests: 20 passing in debug and release modes, including delegated creation, standalone operation without shell pool, history exclusion, and pane-exit focus recovery.
+- Sessionizer's opt-in real-Herdr Ctrl+d regression: passing on Herdr 0.9.5/macOS, including three consecutive runs. The original warm-workspace reproduction also passed after the fix.
 - Focused overlap test: 20 consecutive passing runs; also passes against the archived Go reference. A no-lock disposable build fails as expected.
 - Focused blocked-refill test: 20 consecutive passing runs; also passes against the archived Go reference. A synchronous-refill disposable build fails as expected.
 - Archived Go helper tests: passing.
 - Rust formatting and Clippy with warnings denied: passing.
 - Rust release build and all 35 release-mode tests: passing.
-- Final post-move run of all 31 Rust tests against a newly built archived Go reference: passing.
+- Historical post-move run of the original 31 Rust tests against a newly built archived Go reference: passed.
 - All seven archived Go source/module files match their original Git versions byte-for-byte.
 - No Go source files remain outside `legacy/` in this project.
 - Diff whitespace check: passing.

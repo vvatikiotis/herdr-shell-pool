@@ -34,4 +34,4 @@ The successful sessionizer-to-pool creation path is now described in [SPEC.md](S
 
 Work one behavior at a time. Agree on any additional testing boundary, write a failing behavior test, implement the smallest change, and verify before proceeding. Test through CLI actions where applicable; startup integration and notifications may require additional agreed boundaries.
 
-Only the successful workspace-creation slice is implemented so far. Other requirements above remain planned unless marked otherwise; see the existing-functionality spec and implementation-status checklist. Do not publish to an issue tracker yet.
+The successful workspace-creation path is implemented. Workspace cold-shell recovery and notifications remain planned, along with the tab/split improvements above. Sessionizer's history exclusion and Ctrl+d focus recovery are existing functionality documented in its own spec, not additional work in this plan. Verification gaps in the implementation-status checklist do not, by themselves, authorize more test work. Do not publish to an issue tracker yet.
