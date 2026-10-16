@@ -121,6 +121,6 @@ fn unknown_action_fails_with_usage() {
     assert!(output.stdout.is_empty(), "errors must not use stdout");
     assert_eq!(
         String::from_utf8(output.stderr).expect("UTF-8 error"),
-        "herdr-shell-pool: usage: herdr-shell-pool <fill|status|new-tab|split-left|split-down>\n"
+        "herdr-shell-pool: usage: herdr-shell-pool <fill|status|new-tab|split-left|split-down|new-workspace>\n"
     );
 }

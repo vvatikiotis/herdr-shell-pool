@@ -8,7 +8,7 @@ Starting a shell for every new tab or split can delay work while shell startup c
 
 ## Solution
 
-Hold shells in a dedicated pool workspace. For a new tab or left/down split, select an eligible warm shell, move its pane into the requested location, update its directory and location identifiers, and focus it. Start background replenishment after a successful request.
+Hold shells in a dedicated pool workspace. For a new tab or left/down split, select an eligible warm shell, move its pane into the requested location, update its directory and location identifiers, and focus it. Start background replenishment after a successful request. A `new-workspace` action also moves a warm pane directly into a new workspace for a directory selected by sessionizer.
 
 When the pool lock is busy, no eligible shell exists, or Herdr reports an unchanged move, open the requested destination with a cold shell instead. This recovery is currently silent.
 
@@ -30,14 +30,15 @@ When the pool lock is busy, no eligible shell exists, or Herdr reports an unchan
 14. As a Herdr user, I want a status action, so that I can inspect the count of idle pool shells.
 15. As a Herdr user, I want actions to use my selected Herdr session, so that they affect the right environment.
 16. As a Herdr user, I want pool mutations coordinated, so that concurrent requests do not select the same shell.
+17. As a sessionizer user, I want an unopened project directory to receive a workspace with a warm shell and matching workspace/tab names, so that I can begin work without starting an extra cold shell.
 
 ## Implementation Decisions
 
 ### Actions and source context
 
-- CLI arguments select `new-tab`, `split-left`, `split-down`, `fill`, and `status`. An internal `fill-worker` action requires a worker token. Unknown actions fail with usage information.
+- CLI arguments select `new-tab`, `split-left`, `split-down`, `new-workspace`, `fill`, and `status`. An internal `fill-worker` action requires a worker token. Unknown actions fail with usage information.
 - Configured shortcuts invoke `new-tab` with `prefix+c`, `split-left` with `prefix+"`, and `split-down` with `prefix+%`.
-- The source pane is selected from `HERDR_ACTIVE_PANE_ID`, falling back to `HERDR_PANE_ID`. Missing identifiers or a source absent from the session snapshot cause an error.
+- For tabs and splits, the source pane is selected from `HERDR_ACTIVE_PANE_ID`, falling back to `HERDR_PANE_ID`. Missing identifiers or a source absent from the session snapshot cause an error.
 - The destination directory is the source pane's foreground directory, falling back to its recorded directory and then the user's home directory.
 - A new tab belongs to the source workspace. A split belongs to the source tab alongside the source pane.
 
@@ -55,10 +56,18 @@ When the pool lock is busy, no eligible shell exists, or Herdr reports an unchan
 - Move the pane containing the warm shell without restarting its shell process. Request the move without focus.
 - Left placement uses a right split with ratio 0.61 followed by a pane swap. Down placement uses Herdr's default ratio.
 - After a successful warm move, export `HERDR_PANE_ID`, `HERDR_ACTIVE_PANE_ID`, `HERDR_WORKSPACE_ID`, and `HERDR_TAB_ID` for the destination, change directory, and wait for the setup marker before requesting focus.
-- A nonblocking filesystem lock coordinates pool mutation. A busy lock causes a destination request to use cold-shell recovery. A fill worker unable to obtain the lock exits without filling.
-- Cold-shell recovery also occurs when no eligible candidate exists or Herdr reports that the move made no change. Create the destination directly with the selected directory and the same layout and focus behavior. No warm-shell failure notification is emitted.
+- A nonblocking filesystem lock coordinates pool mutation. A busy lock causes a tab/split request to use cold-shell recovery. A fill worker unable to obtain the lock exits without filling.
+- For tabs and splits, cold-shell recovery also occurs when no eligible candidate exists or Herdr reports that the move made no change. Create the destination directly with the selected directory and the same layout and focus behavior. No warm-shell failure notification is emitted.
 - Move API errors, setup failures, swap failures, and focus failures return errors rather than automatically creating another shell. There is no uncertain-move reconciliation or rollback of partially completed operations.
 - After a successful request, launch detached replenishment. Opening the destination does not wait for that replenishment. Launch failures are silent and detached output is discarded.
+
+### New workspace action: successful path
+
+- Accept `new-workspace --cwd <absolute-path> --label <name>`. The directory must be enterable before any move is attempted. No source-pane environment identifiers are required.
+- Under the pool lock, select an eligible shell and request a `new_workspace` move destination with matching workspace and initial-tab labels. Do not create an ordinary workspace and replace its initial shell.
+- Read the new pane, workspace, and tab identifiers from the move result. Update the shell's identifiers and selected directory, wait for setup output, focus the destination, release the lock, and schedule replenishment.
+- Successful creation is silent and exits successfully. Sessionizer uses that exit status, refreshes history, and prints its selected directory; it does not need a JSON response from this action.
+- This first slice has no workspace cold-shell recovery or failure notifications. A busy pool, absent eligible shell, unchanged move, incomplete destination identifiers, or API/setup/focus error fails without retrying workspace creation. Errors after a move may leave a created destination.
 
 ### Runtime and worker coordination
 
@@ -78,7 +87,7 @@ When the pool lock is busy, no eligible shell exists, or Herdr reports an unchan
 - For overlapping new-tab requests, hold the first move response pending while the second request completes. The second request must use existing busy-lock cold-shell recovery; only the first may move the selected warm shell. Keep the fake API responsive during the pause so the test cannot pass through server-side serialization.
 - To verify background replenishment does not delay foreground completion, hold the refill worker's new-shell API response and require the destination-opening CLI to exit successfully before releasing it. Confirm refill processes remain alive during the pause and finish after release; a bounded wait is a hang safeguard, not a performance guarantee.
 - Controlled boundaries can check protocol behavior without operating on the user's live session. Real terminal rendering, shell startup, and Herdr layout require integration checks.
-- Archived Go tests provide helper-level prior art for quoting, markers, destination construction, pane filtering, and worker-retirement eligibility. Rust integration tests characterize executable behavior against both the Rust implementation and the archived Go reference.
+- Archived Go tests provide helper-level prior art for quoting, markers, destination construction, pane filtering, and worker-retirement eligibility. Rust integration tests characterized the pre-workspace implementation against the archived Go reference. The new workspace action and updated CLI usage are Rust-only additions.
 - Track current test results and remaining verification limits separately in the implementation-status checklist.
 
 ## Out of Scope

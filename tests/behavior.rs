@@ -58,6 +58,15 @@ fn scenario_with(
     environment: &[(&str, &str)],
     busy: bool,
 ) -> (String, String, String) {
+    scenario_arguments(&[action], steps, success, environment, busy)
+}
+fn scenario_arguments(
+    arguments: &[&str],
+    steps: Vec<Step>,
+    success: bool,
+    environment: &[(&str, &str)],
+    busy: bool,
+) -> (String, String, String) {
     let dir = tempfile::Builder::new()
         .prefix("hp")
         .tempdir_in("/tmp")
@@ -174,7 +183,7 @@ fn scenario_with(
     };
     let mut command = Command::new(executable());
     command
-        .arg(action)
+        .args(arguments)
         .env("HERDR_SOCKET_PATH", &socket)
         .env("HERDR_ACTIVE_PANE_ID", "source")
         .env("HOME", "/tmp/herdr-test-home")

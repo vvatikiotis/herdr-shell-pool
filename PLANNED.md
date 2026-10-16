@@ -20,14 +20,18 @@ These are agreed changes, not existing behavior and not requirements for tests c
 - Define recovery beyond the current cold-shell recovery conditions without risking duplicate destinations.
 - Choose retry or notification deduplication behavior only if needed for the agreed requirements.
 
-## Next feature to implement
+## Remaining workspace integration work
 
-Warm shells for newly created workspaces. Until implemented, Herdr handles workspace creation normally.
+The successful sessionizer-to-pool creation path is now described in [SPEC.md](SPEC.md), not as a planned feature here. Deployment and live verification remain tracked in [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md).
 
-Before implementation, agree on the entry point, directory selection, destination setup, recovery behavior, and interaction with Herdr's initial workspace pane.
+- When the shell-pool tool is unavailable, retain sessionizer's ordinary-creation path but add a descriptive Herdr notification explaining that a cold shell was started. The existing silent path does not yet meet that requirement.
+- Add descriptive notifications for failures when the tool runs. Sessionizer already stops without retrying creation on a nonzero tool exit, but this is currently a terminal error, not a Herdr notification.
+- Cold-shell recovery is allowed only when no destination was created. If the outcome cannot be established, stop and report the error rather than risk creating a duplicate workspace.
+- Define how to establish the outcome after failed or partially completed moves and how to recover when a warm shell is unavailable but no destination was created. A nonzero exit alone is not proof that creation did not occur.
+- Choose notification delivery before implementing these recovery changes.
 
 ## Implementation and testing approach
 
 Work one behavior at a time. Agree on any additional testing boundary, write a failing behavior test, implement the smallest change, and verify before proceeding. Test through CLI actions where applicable; startup integration and notifications may require additional agreed boundaries.
 
-These planned requirements have not been implemented or verified by writing this document. Do not publish them to an issue tracker yet.
+Only the successful workspace-creation slice is implemented so far. Other requirements above remain planned unless marked otherwise; see the existing-functionality spec and implementation-status checklist. Do not publish to an issue tracker yet.

@@ -11,7 +11,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub(crate) type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 const POOL_LABEL: &str = "__herdr_shell_pool__";
-const USAGE: &str = "usage: herdr-shell-pool <fill|status|new-tab|split-left|split-down>";
+const USAGE: &str =
+    "usage: herdr-shell-pool <fill|status|new-tab|split-left|split-down|new-workspace>";
 
 fn text(value: &Value) -> &str {
     value.as_str().unwrap_or("")
@@ -440,6 +441,68 @@ fn invoke(action: &str) -> Result<()> {
     schedule_fill();
     Ok(())
 }
+fn new_workspace(cwd: &str, label: &str) -> Result<()> {
+    // Check the selected directory before any move. The shared shell setup
+    // marker alone does not prove that cd succeeded.
+    let check = Command::new("/bin/sh")
+        .args(["-c", ":"])
+        .current_dir(cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|error| {
+            format!("cannot enter workspace directory {cwd}: {error}; workspace was not created")
+        })?;
+    if !check.success() {
+        return Err(
+            format!("cannot enter workspace directory {cwd}; workspace was not created").into(),
+        );
+    }
+    let _lock = pool_lock()?.ok_or("shell pool is busy; workspace was not created")?;
+    let state = snapshot()?;
+    let candidate = pool(&state)
+        .and_then(|workspace| {
+            panes(&state, text(&workspace["workspace_id"]))
+                .into_iter()
+                .find(|pane| text(&pane["agent"]).is_empty() && idle(text(&pane["pane_id"])))
+        })
+        .ok_or("no eligible warm shell; workspace was not created")?;
+    let moved = request(
+        "pane.move",
+        json!({
+            "pane_id": text(&candidate["pane_id"]),
+            "destination": {"type":"new_workspace", "label":label, "tab_label":label},
+            "focus": false,
+        }),
+    )?;
+    if moved["changed"] != true {
+        return Err("Herdr did not move the warm shell into a new workspace".into());
+    }
+    let pane = &moved["pane"];
+    let pane_id = text(&pane["pane_id"]);
+    let workspace_id = text(&pane["workspace_id"]);
+    let tab_id = text(&pane["tab_id"]);
+    if pane_id.is_empty() || workspace_id.is_empty() || tab_id.is_empty() {
+        return Err(
+            "warm shell moved, but Herdr did not return its destination identifiers".into(),
+        );
+    }
+    let command = format!(
+        "export HERDR_PANE_ID={} HERDR_ACTIVE_PANE_ID={} HERDR_WORKSPACE_ID={} HERDR_TAB_ID={} && cd -- {}",
+        quote(pane_id),
+        quote(pane_id),
+        quote(workspace_id),
+        quote(tab_id),
+        quote(cwd)
+    );
+    run_shell(pane_id, &command)?;
+    focus(pane_id)?;
+    drop(_lock);
+    schedule_fill();
+    Ok(())
+}
+
 fn run() -> Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
     match args.get(1).map(String::as_str) {
@@ -455,6 +518,30 @@ fn run() -> Result<()> {
                 .unwrap_or(0);
             println!("{count}/2 ready");
             Ok(())
+        }
+        Some("new-workspace") => {
+            const WORKSPACE_USAGE: &str =
+                "usage: herdr-shell-pool new-workspace --cwd <absolute-path> --label <name>";
+            let mut cwd = None;
+            let mut label = None;
+            let mut pairs = args[2..].chunks_exact(2);
+            for pair in &mut pairs {
+                match pair[0].as_str() {
+                    "--cwd" if cwd.is_none() => cwd = Some(pair[1].as_str()),
+                    "--label" if label.is_none() => label = Some(pair[1].as_str()),
+                    _ => return Err(WORKSPACE_USAGE.into()),
+                }
+            }
+            let cwd = cwd
+                .filter(|path| Path::new(path).is_absolute())
+                .ok_or(WORKSPACE_USAGE)?;
+            let label = label
+                .filter(|name| !name.is_empty())
+                .ok_or(WORKSPACE_USAGE)?;
+            if !pairs.remainder().is_empty() {
+                return Err(WORKSPACE_USAGE.into());
+            }
+            new_workspace(cwd, label)
         }
         Some("fill") => workers::launch(),
         Some("fill-worker") => {

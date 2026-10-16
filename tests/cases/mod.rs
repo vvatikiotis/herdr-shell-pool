@@ -1,6 +1,67 @@
 use super::*;
 
 #[test]
+fn new_workspace_moves_a_warm_shell_to_the_selected_directory() {
+    let temporary = tempfile::TempDir::new().unwrap();
+    let directory = temporary.path().join("project's directory");
+    std::fs::create_dir(&directory).unwrap();
+    let (out, log, err) = scenario_arguments(
+        &[
+            "new-workspace",
+            "--cwd",
+            directory.to_str().unwrap(),
+            "--label",
+            "project",
+        ],
+        vec![
+            snapshot(state()),
+            processes("warm", &["zsh"]),
+            step(
+                "pane.move",
+                json!({"pane_id":"warm","focus":false,"destination":{"type":"new_workspace","label":"project","tab_label":"project"}}),
+                json!({"move_result":{"changed":true,"pane":{"pane_id":"new-pane","workspace_id":"new-workspace","tab_id":"new-tab"}}}),
+            ),
+            step(
+                "pane.wait_for_output",
+                json!({"pane_id":"new-pane","source":"recent","timeout_ms":3000}),
+                json!({}),
+            ),
+            step("pane.focus", json!({"pane_id":"new-pane"}), json!({})),
+        ],
+        true,
+        &[("HERDR_ACTIVE_PANE_ID", ""), ("HERDR_PANE_ID", "")],
+        false,
+    );
+    assert!(out.is_empty());
+    assert!(err.is_empty());
+    assert!(log.contains("HERDR_PANE_ID=new-pane HERDR_ACTIVE_PANE_ID=new-pane HERDR_WORKSPACE_ID=new-workspace HERDR_TAB_ID=new-tab"));
+    assert!(log.contains(&format!(
+        "cd -- '{}/project'\\''s directory'",
+        temporary.path().display()
+    )));
+}
+
+#[test]
+fn new_workspace_rejects_an_unusable_directory_before_creating_anything() {
+    let temporary = tempfile::TempDir::new().unwrap();
+    let missing = temporary.path().join("missing");
+    let (_, _, error) = scenario_arguments(
+        &[
+            "new-workspace",
+            "--cwd",
+            missing.to_str().unwrap(),
+            "--label",
+            "project",
+        ],
+        vec![],
+        false,
+        &[],
+        false,
+    );
+    assert!(error.contains("cannot enter workspace directory"));
+}
+
+#[test]
 fn socket_resolution_supports_home_xdg_and_named_sessions() {
     for mode in ["home", "xdg", "session"] {
         let (out, _, _) = scenario_with(
