@@ -483,6 +483,25 @@ fn shell_command_failure_does_not_focus_or_recover() {
     assert!(err.contains("exit status 7"));
 }
 #[test]
+fn history_advancement_failure_does_not_focus_or_recover() {
+    let s = state();
+    let (_, _, err) = scenario_with(
+        "new-tab",
+        vec![
+            snapshot(s.clone()),
+            snapshot(s),
+            processes("warm", &["zsh"]),
+            moved("new-tab"),
+            setup(),
+        ],
+        false,
+        &[("HERDR_TEST_FAIL_RUN", "2")],
+        false,
+    );
+    assert!(err.contains("history advancement exit status 7"));
+}
+
+#[test]
 fn output_wait_failure_does_not_focus_or_recover() {
     let s = state();
     let (_, _, err) = scenario_with(

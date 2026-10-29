@@ -96,7 +96,7 @@ fn scenario_arguments(
     let bin = dir.path().join("herdr");
     std::fs::write(
         &bin,
-        "#!/bin/sh\nprintf '%s\\n' \"$@\" >> \"$HERDR_TEST_LOG\"\nexit \"${HERDR_TEST_EXIT:-0}\"\n",
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" >> \"$HERDR_TEST_LOG\"\nif [ \"$1\" = pane ] && [ \"$2\" = run ]; then\n    count=0\n    if [ -f \"$HERDR_TEST_RUN_COUNT\" ]; then count=$(cat \"$HERDR_TEST_RUN_COUNT\"); fi\n    count=$((count + 1))\n    printf '%s' \"$count\" > \"$HERDR_TEST_RUN_COUNT\"\n    if [ \"${HERDR_TEST_FAIL_RUN:-0}\" = \"$count\" ]; then exit 7; fi\nfi\nexit \"${HERDR_TEST_EXIT:-0}\"\n",
     )
     .unwrap();
     std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o700)).unwrap();
@@ -122,6 +122,11 @@ fn scenario_arguments(
                     if req["method"] == "pane.wait_for_output" {
                         let marker = req["params"]["match"]["value"].as_str().unwrap();
                         let submitted = std::fs::read_to_string(&server_log).unwrap();
+                        let setup = submitted.lines().last().unwrap();
+                        assert!(
+                            setup.starts_with(" if [[ -o zle ]];"),
+                            "shell setup must start with a space for history exclusion"
+                        );
                         assert!(
                             !submitted.contains(marker),
                             "literal marker must not occur in shell input"
@@ -192,6 +197,7 @@ fn scenario_arguments(
         .env_remove("HERDR_TEST_EXIT")
         .env("XDG_STATE_HOME", dir.path().join("state"))
         .env("HERDR_TEST_LOG", &log)
+        .env("HERDR_TEST_RUN_COUNT", dir.path().join("run.count"))
         .env(
             "PATH",
             format!(
@@ -293,6 +299,13 @@ fn warm_new_tab_updates_context_before_focus() {
     assert!(log.contains("HERDR_TAB_ID=new-tab"));
     assert!(log.contains("HERDR_PANE_ID=warm"));
     assert!(log.contains("cd -- '/tmp/a b'"));
+    let lines: Vec<_> = log.lines().collect();
+    let setup = lines
+        .iter()
+        .position(|line| line.starts_with(" if [[ -o zle ]];"))
+        .unwrap();
+    let advancement = lines.iter().position(|line| *line == " ").unwrap();
+    assert!(advancement > setup, "history advancement must follow setup");
 }
 
 mod cases;

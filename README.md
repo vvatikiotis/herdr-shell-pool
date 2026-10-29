@@ -1,66 +1,41 @@
 # Herdr Shell Pool
 
-Rust implementation of the existing behavior described in [SPEC.md](SPEC.md). The original Go source, helper tests, and module files are preserved in `legacy/` as a reference. Desired changes are separate in [PLANNED.md](PLANNED.md).
+Herdr Shell Pool keeps eligible shells ready in a dedicated pool workspace so new tabs and splits can reuse them instead of waiting for shell startup. It also supports creating a workspace with a warm shell through sessionizer. Requires macOS or Linux, Rust with edition 2024 support to build, and Herdr at runtime. Shell setup invokes the `herdr` executable from `PATH`.
 
-## Build and run
+## Build and install
 
-Requires Rust with edition 2024 support, macOS or Linux, and Herdr. Shell setup invokes the `herdr` executable from `PATH`.
+From this directory, build and replace the executable:
 
 ```sh
 cargo build --release &&
 cp target/release/herdr-shell-pool ./herdr-shell-pool-bin.new &&
 chmod 755 ./herdr-shell-pool-bin.new &&
 mv -f ./herdr-shell-pool-bin.new ./herdr-shell-pool-bin
-./herdr-shell-pool-bin status
 ```
 
-Actions: `fill`, `status`, `new-tab`, `split-left`, `split-down`, and `new-workspace --cwd <absolute-path> --label <name>`.
+Herdr's new-tab and left/down split bindings must invoke `herdr-shell-pool-bin` in this directory. The temporary-file-and-rename sequence avoids overwriting an executable that may be running. Automatic pool preparation at Herdr startup is not implemented; run `./herdr-shell-pool-bin fill` to prepare the pool as needed.
 
-The new-workspace action is the first workspace-support slice: it moves a warm pane directly into a new workspace, names its initial tab, updates shell context, focuses it, and replenishes. It does not yet recover with a cold shell or deliver failure notifications.
+## CLI
 
-Herdr's new-tab and left/down split bindings point to `herdr-shell-pool-bin` in this directory. Rebuild and install it with the commands above after source changes. The binary is ignored by Git.
+```sh
+./herdr-shell-pool-bin fill
+./herdr-shell-pool-bin status
+./herdr-shell-pool-bin new-tab
+./herdr-shell-pool-bin split-left
+./herdr-shell-pool-bin split-down
+./herdr-shell-pool-bin new-workspace --cwd <absolute-path> --label <name>
+```
 
-The temporary-file-and-rename sequence avoids overwriting an executable that may be running. Automatic pool preparation at Herdr startup is not implemented.
+`fill` targets two eligible idle shells; it does not shrink an oversized pool. `status` reports `<count>/2 ready`. Tabs and splits reuse an eligible shell when possible and otherwise silently open a cold shell if the pool is busy, empty, or the move makes no change. Other move, setup, or focus failures return an error rather than automatically retrying with a cold shell. Replenishment runs in the background after a successful request and may fail silently.
+
+`new-workspace` is intended for sessionizer's unopened-project selection. It requires an enterable absolute directory and label, and moves a warm shell into a workspace whose initial tab has the same label. Unlike tabs and splits, it has no cold-shell fallback: pool contention, no eligible shell, or an operation failure stops workspace creation; an error after moving may leave a created destination.
+
+Shell history behavior: after setup, the tool submits a separate space-only line to advance history before focus. This supports zsh with `HIST_IGNORE_SPACE` and bash with `HISTCONTROL=ignorespace` or `ignoreboth`; other shells and custom history hooks are not generalized.
+
+Herdr socket selection uses `HERDR_SOCKET_PATH` when set; otherwise it resolves the configured socket, including `HERDR_SESSION` when supplied. Runtime state uses `XDG_STATE_HOME`, falling back to the user's local state directory. Configuration uses `XDG_CONFIG_HOME`, falling back to the user's configuration directory.
 
 ## Sessionizer integration
 
-Sessionizer looks for this project's `herdr-shell-pool-bin` beside its own plugin directory. Selecting an unopened project delegates creation to `new-workspace`; existing-workspace selection, Ctrl+f, and selected-directory output are unchanged. Workspace creation itself needs no new plugin hook or key binding.
+Sessionizer looks for this project's `herdr-shell-pool-bin` beside its plugin directory. Existing-workspace selection, Ctrl+f, and selected-directory output remain unchanged. Build and install compatible versions of both tools together, and relink sessionizer's updated manifest to enable its pane-exit hook for Ctrl+d close-focus recovery. Sessionizer can run without shell pool: a missing executable preserves ordinary workspace creation, while a failing executable stops creation without a blind retry. The shell-pool tool does not manage close-focus behavior. See the [sessionizer README](../herdr-sessionizer/README.md).
 
-Sessionizer separately excludes the pool workspace from visit history and jump-back. Its `pane.exited` hook corrects Herdr's Ctrl+d fallback when closing a workspace leaves the pool focused. That fix requires the updated sessionizer manifest to be relinked; the shell-pool tool does not manage close-focus behavior. See the [sessionizer README](../herdr-sessionizer/README.md).
-
-Build and install compatible versions of both tools together. Both updated binaries are installed, and sessionizer's pane-exit hook is registered. Ctrl+d recovery passed real isolated Herdr checks, including a workspace created by the shell-pool action. Full interactive picker-to-warm-workspace verification remains pending.
-
-Sessionizer works without shell pool installed. A missing executable preserves ordinary workspace creation; a failing executable stops creation without a blind retry. Descriptive notifications and workspace cold-shell recovery remain planned.
-
-## Test
-
-```sh
-cargo test
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-```
-
-Rust integration tests invoke the executable against isolated Unix sockets, state directories, controlled Herdr replies, and a fake `herdr` shell-input executable. Worker tests exercise real process identity checks with disposable test processes. Tests do not use the live Herdr socket.
-
-Run the controlled concurrency tests on their own:
-
-```sh
-cargo test --test concurrency
-```
-
-The overlap test pauses request A's move response, then requires overlapping request B to finish cold-shell recovery before A is released. The fake server keeps accepting requests during the pause. Assertions check one warm-shell move, one cold tab, distinct destinations, working-context setup, and focus. This is current busy-lock behavior, not a requirement that both requests get warm shells.
-
-The blocked-refill test starts with two pool shells, moves one to a new tab, then holds the refill worker's new-shell response. The foreground CLI must exit while that response remains blocked and the refill worker and launcher remain alive. Releasing the response lets the pool return to two shells.
-
-Both tests use a private copy of the selected executable, an isolated stateful API, and a `ps` shim that delegates identity checks to real `ps`. They wait for detached refill launchers/workers to exit, with identity-checked cleanup on failure. The fake `herdr` logs shell input rather than executing setup; actual shell startup and rendering are not covered. Event gates establish ordering; deadlines bound hangs, not performance.
-
-The archived Go implementation does not support `new-workspace` or the updated usage text. Its pre-workspace parity checks remain historical evidence; do not expect the full current suite to pass against it. To run the unchanged concurrency tests against Go:
-
-```sh
-reference_dir=$(mktemp -d)
-(cd legacy && go build -o "$reference_dir/herdr-shell-pool" .)
-HERDR_POOL_TEST_BIN="$reference_dir/herdr-shell-pool" cargo test --test concurrency
-(cd legacy && go test ./...)
-```
-
-Unset `HERDR_POOL_TEST_BIN` to test Rust again. See [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md) for evidence and remaining verification limits. Passing simulated protocol tests does not prove real Herdr rendering, layout, or shell startup behavior.
+The sessionizer pane-exit fix has been checked with isolated Herdr scenarios, but full interactive picker-to-warm-workspace verification remains pending. Simulated protocol checks do not establish live Herdr rendering, layout, or shell-startup behavior.

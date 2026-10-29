@@ -226,8 +226,10 @@ fn run_shell(pane: &str, command: &str) -> Result<()> {
         .bytes()
         .map(|b| format!("\\{b:03o}"))
         .collect::<String>();
+    // A leading space excludes internal setup from history with HIST_IGNORE_SPACE
+    // (zsh) or HISTCONTROL=ignorespace/ignoreboth (bash).
     let setup = format!(
-        "if [[ -o zle ]]; then zle -I; fi; stty -echo; {command} >/dev/null 2>&1; clear; stty echo; printf '%b\\n' $'{escaped}'"
+        " if [[ -o zle ]]; then zle -I; fi; stty -echo; {command} >/dev/null 2>&1; clear; stty echo; printf '%b\\n' $'{escaped}'"
     );
     let status = Command::new("herdr")
         .args(["pane", "run", pane, &setup])
@@ -243,6 +245,21 @@ fn run_shell(pane: &str, command: &str) -> Result<()> {
         json!({"pane_id":pane,"source":"recent","match":{"type":"substring","value":marker},"timeout_ms":3000}),
         Duration::from_secs(4),
     )?;
+    // A zsh history hook can retain the setup entry despite HIST_IGNORE_SPACE.
+    // Submit a separate space-only line to advance past that internal entry.
+    let status = Command::new("herdr")
+        .args(["pane", "run", pane, " "])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()?;
+    if !status.success() {
+        return Err(format!(
+            "history advancement exit status {}",
+            status.code().unwrap_or(-1)
+        )
+        .into());
+    }
     Ok(())
 }
 fn create_pool_shell(workspace: &str, label: &str) -> Result<()> {
